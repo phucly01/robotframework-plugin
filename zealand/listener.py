@@ -70,16 +70,36 @@ class RFBackend(Backend):
         return super().get_product_id(plan_id)
 
     def test_run_update(self, attrs):
-        """
-        Update the currently active TestRun with more information coming
-        out from the Robot Framework test suite.
-        """
-        self.rpc.TestRun.update(
-            self.run_id,
-            {
-                "notes": attrs["doc"],
-            },
-        )
+    """
+    Update TestRun if it exists, otherwise create it.
+    """
+
+    # If run_id not set OR run doesn't actually exist → create run
+    if not getattr(self, "run_id", None) or not self._run_exists(self.run_id):
+        self.run_id = self.rpc.TestRun.create({
+            "summary": attrs["longname"],
+            "product": self.product_id,
+            "product_version": self.version_id,
+            "build": self.build_id,
+            "manager": self.manager_id,
+        })["id"]
+
+    # Now update the run
+    self.rpc.TestRun.update(
+        self.run_id,
+        {
+            "notes": attrs.get("doc", ""),
+        }
+    )
+
+
+    def _run_exists(self, run_id):
+        """Check if a TestRun exists in Kiwi TCMS."""
+        try:
+            result = self.rpc.TestRun.filter({"id": run_id})
+            return bool(result)
+        except Exception:
+            return False
 
     def rf_test_case_get_or_create(self, attrs):
         """
